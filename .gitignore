@@ -6,3 +6,32 @@
 2022-03-21-cloudbed3/
 apache-iotdb-2.0.5-all-bin/
 apache-iotdb-2.0.5-all-bin.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Output directories
+results/
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/

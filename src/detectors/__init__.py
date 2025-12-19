@@ -1,0 +1,3 @@
+"""
+Detector modules initialization.
+"""
