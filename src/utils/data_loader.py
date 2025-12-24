@@ -73,6 +73,38 @@ class TimeSeriesDataLoader:
             return combined
         return pd.DataFrame()
 
+    def load_cloudbed(self, name: str, date_pattern: Optional[str] = None) -> Dict[str, pd.DataFrame]:
+        """
+        Load data from all cloudbed directories.
+
+        Args:
+            date_pattern: Optional pattern to filter directories (e.g., '2022-03-20')
+
+        Returns:
+            Dictionary mapping cloudbed names to DataFrames
+        """
+        cloudbed_data = {}
+
+        for dirname in os.listdir(self.data_dir):
+            if dirname == name:
+                if date_pattern and date_pattern not in dirname:
+                    continue
+
+                cloudbed_path = os.path.join(self.data_dir, dirname)
+                if os.path.isdir(cloudbed_path):
+                    all_categories = []
+                    for category in self.metric_categories:
+                        df = self.load_metric_category(cloudbed_path, category)
+                        if not df.empty:
+                            all_categories.append(df)
+
+                    if all_categories:
+                        combined = pd.concat(all_categories, ignore_index=True)
+                        cloudbed_data[dirname] = combined
+                        logger.info(f"Loaded {dirname}: {len(combined)} records")
+
+        return cloudbed_data
+
     def load_all_cloudbeds(self, date_pattern: Optional[str] = None) -> Dict[str, pd.DataFrame]:
         """
         Load data from all cloudbed directories.

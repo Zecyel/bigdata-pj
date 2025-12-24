@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Optional
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -86,29 +87,36 @@ class IoTDBConnector:
             except Exception:
                 pass  # Storage group may already exist
 
+            # Sanitize device/measurement segments to satisfy IoTDB path rules
+            safe_device = self.sanitize_path_segment(device)
+            safe_measurement = self.sanitize_path_segment(measurement)
+
             # Create time series path
-            path = f"{storage_group}.{device}.{measurement}"
+            path = f"{storage_group}.{safe_device}.{safe_measurement}"
+            logger.debug(f"Using IoTDB path {path}")
             self.create_timeseries(path)
 
             # Prepare data
             timestamps = df['timestamp'].astype(np.int64) // 10**6  # Convert to milliseconds
             values = df['value'].values
 
-            # Insert data in batches
+            # Insert data in batches via Tablet to satisfy IoTDB API expectations
             batch_size = 1000
+            device_id = f"{storage_group}.{safe_device}"
+            measurements_schema = [safe_measurement]
+            data_types_schema = [TSDataType.DOUBLE]
+
             for i in range(0, len(timestamps), batch_size):
                 batch_timestamps = timestamps[i:i+batch_size].tolist()
                 batch_values = values[i:i+batch_size].tolist()
 
-                measurements_list = [measurement] * len(batch_timestamps)
-                values_list = [batch_values]
-                data_types_list = [TSDataType.DOUBLE]
+                tablet = Tablet(device_id, measurements_schema, data_types_schema)
+                for row_idx, (ts, val) in enumerate(zip(batch_timestamps, batch_values)):
+                    tablet.timestamps[row_idx] = int(ts)
+                    tablet.values[safe_measurement][row_idx] = float(val)
+                    tablet.row_size += 1
 
-                device_id = f"{storage_group}.{device}"
-                self.session.insert_records_of_one_device(
-                    device_id, batch_timestamps, measurements_list,
-                    data_types_list, values_list
-                )
+                self.session.insert_tablet(tablet)
 
             logger.info(f"Inserted {len(df)} records to {path}")
 
@@ -174,7 +182,7 @@ class IoTDBConnector:
             csv_data_loader: TimeSeriesDataLoader instance
             cloudbed_name: Name of cloudbed to load
         """
-        cloudbed_data = csv_data_loader.load_all_cloudbeds()
+        cloudbed_data = csv_data_loader.load_cloudbed(cloudbed_name)
 
         if cloudbed_name not in cloudbed_data:
             logger.error(f"Cloudbed {cloudbed_name} not found")
@@ -189,8 +197,15 @@ class IoTDBConnector:
                 ts_data = csv_data_loader.get_service_timeseries(df, service, kpi)
                 if not ts_data.empty:
                     # Sanitize names for IoTDB
-                    device = service.replace(':', '_').replace('.', '_')
-                    measurement = kpi
+                    device = self.sanitize_path_segment(service)
+                    measurement = self.sanitize_path_segment(kpi)
                     self.insert_dataframe(ts_data, "root.cloudbed", device, measurement)
 
         logger.info(f"Loaded {cloudbed_name} into IoTDB")
+
+    @staticmethod
+    def sanitize_path_segment(name: str) -> str:
+        """Replace IoTDB-illegal path characters with underscores."""
+        sanitized = re.sub(r"[^A-Za-z0-9_]", "_", name)
+        sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+        return sanitized or "unnamed"
