@@ -122,3 +122,31 @@ print('KPIs:', loader.get_all_kpis(df)[:5])
 # Then analyze specific one
 python src/main.py --service "SERVICE_NAME" --kpi "KPI_NAME"
 ```
+
+### Spark 分布式运行
+
+```bash
+# 安装 Java（macOS 需先安装可写的 Homebrew，或使用系统已装的 JDK）
+# 参考：brew install openjdk@17 && export JAVA_HOME=$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 使用内置的合成数据快速验证
+python src/spark_job.py \
+  --data-dir ./data/cloudbed_synth_2025-12-28 \
+  --output-dir ./results \
+  --methods ensemble_stat zscore \
+  --master 'local[*]' \
+  --partitions 4
+
+# 使用真实数据目录运行（目录结构需为 cloudbed/**/metric/*/*.csv）
+python src/spark_job.py \
+  --data-dir /path/to/your/cloudbed_root \
+  --output-dir ./results \
+  --methods ensemble_stat \
+  --master 'spark://<your-cluster>' \
+  --partitions 64
+```
+
+输出位于 `results/spark_results/`，包含按方法分区写出的 CSV 及聚合 `summary_*.csv`。
